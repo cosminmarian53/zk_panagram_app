@@ -20,11 +20,24 @@ contract PanagramTest is Test {
         //start round
     }
 
+    function _getProof(bytes32 guess, bytes32 correctAnswer) internal returns (bytes memory) {
+        uint256 NUM_ARGS = 5;
+        string[] memory inputs = new string[](NUM_ARGS);
+        inputs[0] = "npx";
+        inputs[1] = "tsx";
+        inputs[2] = "js-scripts/generateProof.ts";
+        inputs[3] = vm.toString(guess);
+        inputs[4] = vm.toString(correctAnswer);
+
+        bytes memory result = vm.ffi(inputs);
+        return result;
+    }
     // 1. Test someone receives NFT 0 if they guess correctly first
+
     function testCorrectGuessPasses() public {
         vm.prank(user);
-        panagram.makeGuess(proof);
-    }   
+        panagram.makeGuess(_getProof(ANSWER, ANSWER));
+    }
     // 2. Test someone receives NFT 1 if they guess correctly second
 
     // 3. Test we can start a new round (e.g., after the current round's time has elapsed or conditions are met)
