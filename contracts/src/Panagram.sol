@@ -1,99 +1,120 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+// Import ERC1155 contract (NFT)
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import {IVerifier} from "./Verifier.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract Panagram is ERC1155, Ownable {
-    IVerifier public verifier;
-    bytes32 private s_answer;
-    IVerifier public s_verifier; // Address of the verifier contract
-    mapping(address => uint256) public s_lastCorrectGuessRound;
-    uint256 public constant PANAGRAM_TOKEN_ID = 1;
-    uint256 public constant MIN_DURATION = 10800;
+    IVerifier public s_verifier;
+
     uint256 public s_currentRound;
-    address public s_currentRoundWinner;
+
+    // Keep track of the winner of the current round
+    address public s_currentRoundWinner; // initially address(0)
+
+    // Mapping to track number of wins for each address
+    mapping(address => uint256) public s_winnerWins;
+
+    // Track which round a user last guessed correctly
+    mapping(address => uint256) public s_lastCorrectGuessRound;
+
+    bytes32 public s_answer; // hash of the answer
+    uint256 public MIN_DURATION = 10800; // minimum of 3 hours to prevent owner stopping the round early
     uint256 public s_roundStartTime;
-    string public constant NFT_TOKEN_URI =
-        "ipfs://bafybeicqfc4ipkle34tgqv3gh7gccwhmr22qdg7p6k6oxon255mnwb6csi/{id}.json";
+    // Events
 
-    //Events
-    event Panagram__VerifierUpdated(address indexed newVerifier);
-    event Panagram__NewRoundCreated(bytes32 indexed answer);
-    event Panagram_WinnerCrowned(address indexed winner, uint256 round);
-    event Panagram_RunnerUpCrowned(address indexed runnerUp, uint256 round);
+    event Panagram__RoundStarted();
+    event Panagram__NFTMinted(address winner, uint256 tokenId);
+    event Panagram__VerifierUpdated(IVerifier verifier);
+    event Panagram__ProofSucceeded(bool result);
 
-    //Errors
-    error Panagram_MinTimeNotPassed(uint256 minDuration, uint256 timePassed);
-    error Panagram_NoRoundWinner();
-    error Panagram_FirstPanagramNotSet();
-    error Panagram_AlreadyGuessedCorrectly(uint256 round, address user);
-    error Panagram_InvalidProof();
+    error Panagram__IncorrectGuess();
+    error Panagram__NoRoundWinner();
+    error Panagram__AlreadyAnsweredCorrectly();
+    error Panagram__InvalidTokenId();
+    error Panagram__FirstPanagramNotSet();
+    error Panagram__MinTimeNotPassed(uint256 mintTimePassed, uint256 currentTimePassed);
 
-    constructor(IVerifier _verifier) ERC1155(NFT_TOKEN_URI) Ownable(msg.sender) {
-        verifier = _verifier;
+    constructor(IVerifier _verifier)
+        ERC1155("ipfs://bafybeicqfc4ipkle34tgqv3gh7gccwhmr22qdg7p6k6oxon255mnwb6csi/{id}.json")
+        Ownable(msg.sender)
+    {
+        s_verifier = _verifier;
     }
 
-    //function to create a new round
-    function newRound(bytes32 _answer) external onlyOwner {
+    function contractURI() public pure returns (string memory) {
+        return "ipfs://bafybeicqfc4ipkle34tgqv3gh7gccwhmr22qdg7p6k6oxon255mnwb6csi/collection.json";
+    }
+
+    // Only the owner can start and end the round
+    function newRound(bytes32 _correctAnswer) external onlyOwner {
+        // check if we need to initialize the first round
         if (s_roundStartTime == 0) {
-            // First round
+            // this initializes the first round!
             s_roundStartTime = block.timestamp;
-            s_answer = _answer;
+            s_answer = _correctAnswer;
         } else {
-            // Subsequent rounds
+            // check the min duration has passed
             if (block.timestamp < s_roundStartTime + MIN_DURATION) {
-                revert Panagram_MinTimeNotPassed(MIN_DURATION, block.timestamp - s_roundStartTime);
+                revert Panagram__MinTimeNotPassed(MIN_DURATION, block.timestamp - s_roundStartTime);
             }
+            // there has to have been a winner to start a new round.
             if (s_currentRoundWinner == address(0)) {
-                // Previous round must have a winner to start a new one.
-                revert Panagram_NoRoundWinner();
+                revert Panagram__NoRoundWinner();
             }
-            // Reset for the new round
-            s_roundStartTime = block.timestamp;
+            s_answer = _correctAnswer;
             s_currentRoundWinner = address(0);
-            s_answer = _answer;
         }
         s_currentRound++;
-        emit Panagram__NewRoundCreated(_answer);
+        emit Panagram__RoundStarted();
     }
-    //function to allow users to submit a guess
 
-    function makeGuess(bytes memory _proof) external returns (bool) {
+    // Verify the guess and mint NFT if first or subsequent correct guesses
+    function makeGuess(bytes calldata proof) external returns (bool) {
         if (s_currentRound == 0) {
-            revert Panagram_FirstPanagramNotSet();
+            revert Panagram__FirstPanagramNotSet();
         }
+        bytes32[] memory inputs = new bytes32[](2);
+        inputs[0] = s_answer;
+        inputs[1] = bytes32(uint256(uint160(msg.sender))); // hard code to prevent front-running!
         if (s_lastCorrectGuessRound[msg.sender] == s_currentRound) {
-            revert Panagram_AlreadyGuessedCorrectly(s_currentRound, msg.sender);
+            revert Panagram__AlreadyAnsweredCorrectly();
         }
-        bytes32[] memory publicInputs = new bytes32[](1);
-        publicInputs[0] = s_answer;
-        bool proofResult = s_verifier.verify(_proof, publicInputs);
+        bool proofResult = s_verifier.verify(proof, inputs);
+        emit Panagram__ProofSucceeded(proofResult);
         if (!proofResult) {
-            revert Panagram_InvalidProof();
+            revert Panagram__IncorrectGuess();
         }
-
-        // If proof is valid, the guess is correct
         s_lastCorrectGuessRound[msg.sender] = s_currentRound;
-
+        // If this is the first correct guess, s_currentRoundWinner will still be address(0) so mint NFT with id 1
         if (s_currentRoundWinner == address(0)) {
-            // First correct guess for this round
             s_currentRoundWinner = msg.sender;
-            _mint(msg.sender, 0, 1, ""); // Mint NFT ID 0 (Winner NFT)
-            emit Panagram_WinnerCrowned(msg.sender, s_currentRound);
+            s_winnerWins[msg.sender]++; // Increment wins for the first winner
+            _mint(msg.sender, 0, 1, ""); // Mint NFT with ID 0
+            emit Panagram__NFTMinted(msg.sender, 0);
         } else {
-            // Subsequent correct guess (runner-up)
-            _mint(msg.sender, 1, 1, ""); // Mint NFT ID 1 (Participant NFT)
-            emit Panagram_RunnerUpCrowned(msg.sender, s_currentRound);
+            // If someone is the second or further correct guesser, mint NFT with id 2
+            _mint(msg.sender, 1, 1, ""); // Mint NFT with ID 1
+            emit Panagram__NFTMinted(msg.sender, 1);
         }
-        return true;
+        return proofResult;
     }
-    // set a new verifier
 
+    // Allow updating the verifier (only the owner)
     function setVerifier(IVerifier _verifier) external onlyOwner {
-        require(address(_verifier) != address(0), "Invalid verifier address");
-        verifier = _verifier;
-        emit Panagram__VerifierUpdated(address(verifier));
+        s_verifier = _verifier;
+        emit Panagram__VerifierUpdated(_verifier);
+    }
+
+    // Getter for current round status
+    function getCurrentRoundStatus() external view returns (address) {
+        return (s_currentRoundWinner);
+    }
+
+    function getCurrentPanagram() external view returns (bytes32) {
+        return s_answer;
     }
 }
