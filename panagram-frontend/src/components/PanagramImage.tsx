@@ -1,43 +1,50 @@
-import { ANAGRAM } from "../constant";
+import { useState, useEffect } from 'react';
+import { getWordData } from "../constant";
 
 function PanagramImage() {
-  const word = ANAGRAM;
+  const [anagram, setAnagram] = useState('');
 
-  // Scramble the word (excluding the middle letter)
-  const middleIndex = Math.floor(word.length / 2); // Middle letter
+  useEffect(() => {
+    getWordData().then(data => {
+      setAnagram(data.anagram);
+    });
+  }, []);
+
+  if (!anagram) {
+    return <div className="flex items-center justify-center h-64">Loading...</div>;
+  }
+
+  const word = anagram;
+  const middleIndex = Math.floor(word.length / 2);
   const letters = word.split("");
-  const middleLetter = letters[middleIndex]; // Store the middle letter
-  letters.splice(middleIndex, 1); // Remove the middle letter
-  const scrambledLetters = letters.sort(() => Math.random() - 0.5); // Shuffle the remaining letters
-  scrambledLetters.splice(middleIndex, 0, middleLetter); // Insert the middle letter back
+  const middleLetter = letters[middleIndex];
+  letters.splice(middleIndex, 1);
+  const scrambledLetters = letters.sort(() => Math.random() - 0.5);
+  scrambledLetters.splice(middleIndex, 0, middleLetter);
 
   return (
     <div className="flex items-center justify-center my-8">
-      <div className="relative w-64 h-64">
-        {/* Render the middle letter in the center */}
-        <div
-          className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center
-            bg-gray-800 text-white rounded-full w-12 h-12 text-xl font-bold"
-          style={{ left: "50%", top: "50%" }}
-        >
-          {scrambledLetters[middleIndex]} {/* Middle letter */}
-        </div>
-
-        {/* Render the surrounding scrambled letters in a circular layout */}
+      <div className="relative w-72 h-72">
         {scrambledLetters.map((letter, index) => {
-          if (index === middleIndex) return null; // Skip the middle letter as it is already rendered
-          const angle =
-            (360 / (scrambledLetters.length - 1)) *
-            (index < middleIndex ? index : index - 1);
-          const x = 50 + 35 * Math.cos((angle * Math.PI) / 180); // X position for circle
-          const y = 50 + 35 * Math.sin((angle * Math.PI) / 180); // Y position for circle
+          const isMiddle = index === middleIndex;
+          const angle = (360 / (scrambledLetters.length - 1)) * (index < middleIndex ? index : index - 1);
+          const x = 50 + 40 * Math.cos((angle * Math.PI) / 180);
+          const y = 50 + 40 * Math.sin((angle * Math.PI) / 180);
+
+          const style = isMiddle
+            ? { left: "50%", top: "50%" }
+            : { left: `${x}%`, top: `${y}%` };
 
           return (
             <div
               key={index}
-              className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center
-                bg-gray-300 text-gray-700 rounded-full w-12 h-12 text-xl font-bold"
-              style={{ left: `${x}%`, top: `${y}%` }}
+              className={`absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center
+                rounded-full w-16 h-16 text-2xl font-bold transition-all duration-300
+                ${isMiddle
+                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/50"
+                  : "bg-white/10 text-white/80 hover:bg-emerald-500 hover:text-white hover:shadow-lg hover:shadow-emerald-500/50"
+                }`}
+              style={style}
             >
               {letter}
             </div>

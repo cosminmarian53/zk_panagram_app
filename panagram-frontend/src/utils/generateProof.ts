@@ -1,24 +1,37 @@
 import { UltraHonkBackend } from "@aztec/bb.js";
 import circuit from "../../../circuit/target/zk_panagram_app.json";
 import { Noir } from "@noir-lang/noir_js";
-
-
 import type { CompiledCircuit } from "@noir-lang/types";
+import { getWordData } from "../constant";
+import { solidityPackedKeccak256, zeroPadValue } from "ethers";
 
-import { ANSWER_HASH } from "../constant";
+const FIELD_MODULUS = BigInt(
+  "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+);
+
+function calculateDoubleHash(singleHash: string): string {
+  const doubleHash = solidityPackedKeccak256(['bytes32'], [singleHash]);
+  const reducedDoubleHash = BigInt(doubleHash) % FIELD_MODULUS;
+  return "0x" + reducedDoubleHash.toString(16).padStart(64, "0");
+}
 
 export async function generateProof(
-  guess: string,
+  guess_hash: string,
   address: string,
   showLog: (content: string) => void
 ): Promise<{ proof: Uint8Array; publicInputs: string[] }> {
   try {
+    const { hash: answerHash } = await getWordData();
+    const doubleAnswerHash = calculateDoubleHash(answerHash);
+
+    const formattedAddress = zeroPadValue(address, 32);
+
     const noir = new Noir(circuit as CompiledCircuit);
     const honk = new UltraHonkBackend(circuit.bytecode, { threads: 1 });
     const inputs = {
-      guess: guess,
-      address: address,
-      expected_hash: ANSWER_HASH,
+      guess_hash: guess_hash,
+      address: formattedAddress,
+      answer_double_hash: doubleAnswerHash,
     };
 
     showLog("Generating witness... ⏳");
@@ -35,8 +48,6 @@ export async function generateProof(
     const isValid = await honk.verifyProof(offChainProof);
     showLog(`Proof is valid: ${isValid} ✅`);
 
-    // no longer needed for bb:)
-    // const cleanProof = proof.slice(4); // remove first 4 bytes (buffer size)
     return { proof, publicInputs };
   } catch (error) {
     console.log(error);

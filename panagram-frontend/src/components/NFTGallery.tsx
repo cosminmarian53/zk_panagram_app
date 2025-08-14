@@ -43,7 +43,6 @@ export default function NFTGallery({
   token_id: number;
 }) {
   const [nftData, setNftData] = useState<{
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     metadata: any;
     imageUrl: string | null;
   }>({
@@ -70,25 +69,26 @@ export default function NFTGallery({
     fetchMetadata(uriResult.data as string, token_id).then(setNftData);
   }, [uriResult.data, token_id]);
 
-  if (balanceResult.isLoading || uriResult.isLoading) return <p>Loading...</p>;
+  if (balanceResult.isLoading || uriResult.isLoading) return <div className="text-center text-white/70">Loading...</div>;
   if (balanceResult.isError || uriResult.isError)
-    return <p>Error fetching NFT data</p>;
+    return <div className="text-center text-red-500">Error fetching NFT data</div>;
 
   const balance = balanceResult.data ? Number(balanceResult.data) : 0;
 
   return (
-    <div className="nft-gallery my-8">
-      <h2 className="text-xl font-semibold mb-4">
-        {token_id === 0 ? "Times Won" : "Times got Correct (but not won)"}
-      </h2>
+    <div className="bg-black/30 p-6 rounded-lg shadow-lg text-center border border-emerald-500/10">
+      <h3 className="text-xl font-bold text-emerald-400 mb-2">
+        {token_id === 0 ? "Times Won" : "Times Correct (Not Won)"}
+      </h3>
       {balance > 0 ? (
         <NFTCard
           tokenId={token_id}
           balance={balance}
           imageUrl={nftData.imageUrl}
+          metadata={nftData.metadata}
         />
       ) : (
-        <p>No tokens owned.</p>
+        <p className="text-white/70">No tokens owned.</p>
       )}
     </div>
   );
@@ -98,27 +98,29 @@ function NFTCard({
   tokenId,
   balance,
   imageUrl,
+  metadata,
 }: {
   tokenId: number;
   balance: number;
   imageUrl: string | null;
+  metadata: any;
 }) {
   return (
-    <div className="nft-card border border-gray-300 rounded-lg bg-gray-50 p-4 text-center shadow-md hover:scale-105 hover:shadow-lg transition-all duration-300 justify-center">
-      <h3 className="text-lg font-semibold text-gray-800">
-        Token ID: {tokenId}
-      </h3>
-      <p className="text-gray-600">Balance: {balance}</p>
+    <div className="transform hover:scale-105 transition-all duration-300">
       {imageUrl ? (
         <img
           src={imageUrl}
           alt={`NFT ${tokenId}`}
-          className="mt-4 max-w-full h-auto rounded-md"
+          className="w-full h-auto rounded-lg shadow-lg mb-4 border-2 border-emerald-500/50"
           onError={(e) => (e.currentTarget.style.display = "none")}
         />
       ) : (
-        <p className="text-gray-600 mt-4">No image available.</p>
+        <div className="w-full h-48 bg-black/20 rounded-lg flex items-center justify-center mb-4 border-2 border-emerald-500/20">
+          <p className="text-white/70">No image available</p>
+        </div>
       )}
+      <h4 className="text-lg font-bold text-white">{metadata?.name || `Token ID: ${tokenId}`}</h4>
+      <p className="text-white/70">Balance: {balance}</p>
     </div>
   );
 }
