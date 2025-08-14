@@ -88,6 +88,7 @@ contract PanagramTest is Test {
         bytes memory proof2 = _getProof(CORRECT_GUESS, ANSWER, user2);
         vm.prank(user2);
         panagram.makeGuess(proof2);
+        
         vm.assertEq(panagram.s_winnerWins(user2), 0);
         vm.assertEq(panagram.balanceOf(user2, 0), 0);
         vm.assertEq(panagram.balanceOf(user2, 1), 1);
